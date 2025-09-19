@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이미지 비교 뷰어 (최종 수정)</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            gap: 20px;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        h1 {
+            color: #1a1a1a;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            align-items: center;
+            justify-content: center;
+        }
+        .controls label {
+            font-weight: 600;
+        }
+        .controls select,
+        .controls button {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            background-color: #fff;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s ease-in-out;
+        }
+        .controls button {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .controls button:hover {
+            background-color: #0056b3;
+            border-color: #0056b3;
+        }
+        .comparison-container {
+            position: relative;
+            width: 80vw;
+            max-width: 900px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            user-select: none;
+            cursor: grab;
+        }
+        .comparison-container.panning {
+            cursor: grabbing;
+        }
+        .image-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform-origin: 0 0;
+            /* ✅ 이미지를 배경으로 설정 */
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+        .image-wrapper.top-image {
+            clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);
+        }
+        .slider-line {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 4px;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.9);
+            cursor: ew-resize;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+        .slider-handle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            background-color: rgba(0, 0, 0, 0.3);
+            transform: translate(-50%, -50%);
+            display: flex;
+            align-items: center;
+            justify-content: space-evenly;
+        }
+        .slider-handle::before,
+        .slider-handle::after {
+            content: '';
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 8px 10px 8px 0;
+            border-color: transparent rgba(255, 255, 255, 0.9) transparent transparent;
+        }
+        .slider-handle::before {
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>이미지 비교 뷰어</h1>
+
+    <div class="controls">
+        <label for="left-image-type">좌측:</label>
+        <select id="left-image-type"></select>
+
+        <label for="right-image-type">우측:</label>
+        <select id="right-image-type"></select>
+        
+        <label for="image-index">번호:</label>
+        <select id="image-index"></select>
+
+        <button id="reset-zoom-pan">확대/이동 초기화</button>
+    </div>
+
+    <div class="comparison-container" id="comparison-container">
+        <div class="image-wrapper" id="base-image-wrapper"></div>
+        <div class="image-wrapper top-image" id="top-image-wrapper"></div>
+        
+        <div class="slider-line" id="slider-line">
+            <div class="slider-handle"></div>
+        </div>
+    </div>
+
+    <script>
+        const IMG_BASE_PATH = './data/'; 
+        const CONFIG = {
+            original: [ "original_00001.png", "original_00002.png", "original_00003.png", "original_00004.png", "original_00005.png", "original_00006.png", "original_00007.png", "original_00008.png", "original_00009.png", "original_00010.png", "original_00011.png", "original_00012.png", "original_00013.png", "original_00014.png", "original_00015.png", "original_00016.png", "original_00017.png", "original_00018.png", "original_00019.png", "original_00020.png", "original_00021.png", "original_00022.png", "original_00023.png", "original_00024.png", "original_00025.png", "original_00026.png", "original_00027.png", "original_00028.png", "original_00029.png", "original_00030.png", "original_00031.png", "original_00032.png", "original_00033.png", "original_00034.png", "original_00035.png" ],
+            resize: [ "resize_00001.png", "resize_00002.png", "resize_00003.png", "resize_00004.png", "resize_00005.png", "resize_00006.png", "resize_00007.png", "resize_00008.png", "resize_00009.png", "resize_00010.png", "resize_00011.png", "resize_00012.png", "resize_00013.png", "resize_00014.png", "resize_00015.png", "resize_00016.png", "resize_00017.png", "resize_00018.png", "resize_00019.png", "resize_00020.png", "resize_00021.png", "resize_00022.png", "resize_00023.png", "resize_00024.png", "resize_00025.png", "resize_00026.png", "resize_00027.png", "resize_00028.png", "resize_00029.png", "resize_00030.png", "resize_00031.png", "resize_00032.png", "resize_00033.png", "resize_00034.png", "resize_00035.png" ],
+            upscale: [ "upscale_00001.png", "upscale_00002.png", "upscale_00003.png", "upscale_00004.png", "upscale_00005.png", "upscale_00006.png", "upscale_00007.png", "upscale_00008.png", "upscale_00009.png", "upscale_00010.png", "upscale_00011.png", "upscale_00012.png", "upscale_00013.png", "upscale_00014.png", "upscale_00015.png", "upscale_00016.png", "upscale_00017.png", "upscale_00018.png", "upscale_00019.png", "upscale_00020.png", "upscale_00021.png", "upscale_00022.png", "upscale_00023.png", "upscale_00024.png", "upscale_00025.png", "upscale_00026.png", "upscale_00027.png", "upscale_00028.png", "upscale_00029.png", "upscale_00030.png", "upscale_00031.png", "upscale_00032.png", "upscale_00033.png", "upscale_00034.png", "upscale_00035.png" ]
+        };
+
+        const leftSelect = document.getElementById('left-image-type');
+        const rightSelect = document.getElementById('right-image-type');
+        const indexSelect = document.getElementById('image-index');
+        const baseImageWrapper = document.getElementById('base-image-wrapper');
+        const topImageWrapper = document.getElementById('top-image-wrapper');
+        const slider = document.getElementById('slider-line');
+        const container = document.getElementById('comparison-container');
+        const resetZoomPanButton = document.getElementById('reset-zoom-pan');
+
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+        let isPanning = false;
+        let startPanX = 0;
+        let startPanY = 0;
+        let sliderPositionPercent = 0.5;
+
+        function populateSelectors() {
+            const imageTypes = Object.keys(CONFIG);
+            imageTypes.forEach(type => {
+                leftSelect.add(new Option(type, type));
+                rightSelect.add(new Option(type, type));
+            });
+            leftSelect.value = 'original';
+            rightSelect.value = 'upscale';
+            const imageCount = CONFIG.original.length;
+            for (let i = 1; i <= imageCount; i++) {
+                indexSelect.add(new Option(i, i - 1));
+            }
+        }
+
+        function updateImages() {
+            const leftType = leftSelect.value;
+            const rightType = rightSelect.value;
+            const index = indexSelect.value;
+            const baseImageName = CONFIG[leftType][index];
+            const topImageName = CONFIG[rightType][index];
+            const baseImagePath = `${IMG_BASE_PATH}${leftType}/${baseImageName}`;
+            const topImagePath = `${IMG_BASE_PATH}${rightType}/${topImageName}`;
+
+            // ✅ div에 배경 이미지로 설정
+            baseImageWrapper.style.backgroundImage = `url('${baseImagePath}')`;
+            topImageWrapper.style.backgroundImage = `url('${topImagePath}')`;
+
+            // ✅ 임시 이미지를 로드하여 비율 계산 (메모리상에서만)
+            const tempImg = new Image();
+            tempImg.onload = () => {
+                const aspectRatio = tempImg.naturalWidth / tempImg.naturalHeight;
+                container.style.height = `${container.clientWidth / aspectRatio}px`;
+                resetZoomPan();
+            };
+            tempImg.src = baseImagePath;
+        }
+        
+        function updateClipPath() {
+            const containerWidth = container.clientWidth;
+            const sliderPx = containerWidth * sliderPositionPercent;
+            const clipPercent = ((sliderPx - translateX) / (containerWidth * scale)) * 100;
+            const clampedClipPercent = Math.max(0, Math.min(100, clipPercent));
+            topImageWrapper.style.clipPath = `polygon(${clampedClipPercent}% 0, 100% 0, 100% 100%, ${clampedClipPercent}% 100%)`;
+        }
+
+        function updateSliderPosition(x) {
+            const rect = container.getBoundingClientRect();
+            let position = (x - rect.left) / rect.width;
+            sliderPositionPercent = Math.max(0, Math.min(1, position));
+            slider.style.left = `${sliderPositionPercent * 100}%`;
+            updateClipPath();
+        }
+
+        function applyTransform() {
+            const transformValue = `scale(${scale}) translate(${translateX}px, ${translateY}px)`;
+            baseImageWrapper.style.transform = transformValue;
+            topImageWrapper.style.transform = transformValue;
+            updateClipPath();
+        }
+
+        function resetZoomPan() {
+            scale = 1;
+            translateX = 0;
+            translateY = 0;
+            applyTransform();
+            updateSliderPosition(container.getBoundingClientRect().left + container.clientWidth / 2);
+        }
+
+        function setupEventListeners() {
+            let isSliderDragging = false;
+            slider.addEventListener('mousedown', e => { isSliderDragging = true; e.preventDefault(); });
+            window.addEventListener('mouseup', () => { isSliderDragging = false; isPanning = false; container.classList.remove('panning'); });
+            window.addEventListener('mousemove', e => { if (isSliderDragging) updateSliderPosition(e.clientX); });
+            slider.addEventListener('touchstart', e => { isSliderDragging = true; e.preventDefault(); }, { passive: false });
+            window.addEventListener('touchend', () => { isSliderDragging = false; isPanning = false; container.classList.remove('panning'); });
+            window.addEventListener('touchmove', e => { if (isSliderDragging && e.touches[0]) updateSliderPosition(e.touches[0].clientX); });
+            
+            container.addEventListener('wheel', e => {
+                e.preventDefault();
+                const rect = container.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                const oldScale = scale;
+                const zoomFactor = 1.1;
+
+                if (e.deltaY < 0) { // Zoom in
+                    scale *= zoomFactor;
+                } else { // Zoom out
+                    scale /= zoomFactor;
+                }
+                scale = Math.max(0.1, Math.min(10, scale));
+
+                translateX = mouseX - (mouseX - translateX) * (scale / oldScale);
+                translateY = mouseY - (mouseY - translateY) * (scale / oldScale);
+
+                applyTransform();
+            });
+            
+            container.addEventListener('mousedown', e => {
+                if (!e.target.closest('.slider-line')) {
+                    isPanning = true;
+                    container.classList.add('panning');
+                    startPanX = e.clientX - translateX;
+                    startPanY = e.clientY - translateY;
+                    e.preventDefault();
+                }
+            });
+
+            container.addEventListener('mousemove', e => {
+                if (isPanning && !isSliderDragging) {
+                    translateX = e.clientX - startPanX;
+                    translateY = e.clientY - startPanY;
+                    applyTransform();
+                }
+            });
+            
+            leftSelect.addEventListener('change', updateImages);
+            rightSelect.addEventListener('change', updateImages);
+            indexSelect.addEventListener('change', updateImages);
+            resetZoomPanButton.addEventListener('click', resetZoomPan);
+        }
+
+        populateSelectors();
+        updateImages();
+        setupEventListeners();
+
+        const setInitialPositions = () => {
+            const tempImg = new Image();
+            tempImg.onload = () => {
+                const aspectRatio = tempImg.naturalWidth / tempImg.naturalHeight;
+                container.style.height = `${container.clientWidth / aspectRatio}px`;
+                updateSliderPosition(container.getBoundingClientRect().left + container.clientWidth / 2);
+            };
+            const leftType = leftSelect.value;
+            const index = indexSelect.value;
+            tempImg.src = `${IMG_BASE_PATH}${leftType}/${CONFIG[leftType][index]}`;
+        };
+
+        window.addEventListener('load', setInitialPositions);
+        window.addEventListener('resize', setInitialPositions);
+
+    </script>
+</body>
+</html>
